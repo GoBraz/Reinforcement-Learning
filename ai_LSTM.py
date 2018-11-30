@@ -28,7 +28,6 @@ class Network(nn.Module):
         # Initializing Hidden State and Cell State for LSTM2
         self.cx2 = torch.randn(1, self.hidden_size)
         self.hx2 = torch.randn(1, self.hidden_size)
-        # Instantiating the objects that make opperations between each layer
         # Instantiating the objec that is going to perform a LSTM CELL
         # Inputs : x_t, h_(t-1), c_(t-1)
         # outputs : h_t, c_t
@@ -42,13 +41,13 @@ class Network(nn.Module):
         # c_t = f*c_(t-1) + i_t*g
         # -> Output gate, information from this timestep that will be passed to the output and hidden state pass a multiplication with cell state squished on (-1,1)
         # o = relu( W_io*X + B_io + U_ho*H + B_ho )
-        # For better visualization, access: http://colah.github.io/posts/2015-08-Understanding-LSTMs/  
+        # For better visualization of a LSTM net, access: http://colah.github.io/posts/2015-08-Understanding-LSTMs/  
         self.lstm1 = nn.LSTMCell(self.input_size, self.hidden_size)
         self.lstm2 = nn.LSTMCell(self.hidden_size, self.hidden_size)
         self.linear = nn.Linear(self.hidden_size,self.nb_action)
         
     # Function that will activate neurons and perform forward propagation to calculate
-    # Q-values to each action
+    # Q-values on each action
     def forward(self, state):
         # Do the foreward pass on the Neural Net
         # LSTM layers
@@ -63,23 +62,23 @@ class ReplayMemory(object):
     def __init__(self, capacity):
         self.capacity = capacity
         self.memory = []
-        self.storehouse = []
+        self.episodeStorer = []
 
         
     def push(self):
-        self.memory.append(self.storehouse)
+        self.memory.append(self.episodeStorer)
         if len(self.memory) > self.capacity:
             del self.memory[0]
 
     def sample_episode(self):
         # If we did not stored any episode on the memory yet:
         if len(self.memory) == 0:
-            # If there is nothing on the storehouse:
-            if len(self.storehouse) == 0:
+            # If there is nothing on the episodeStorer:
+            if len(self.episodeStorer) == 0:
                 episode = None
-            # If there is something on the storehouse:
+            # If there is something on the episodeStorer:
             else:
-                episode = self.storehouse
+                episode = self.episodeStorer
         # If there is some episode stored on the memory already:
         else:
             sample_idex = random.sample(range(0, len(self.memory)), 1)[0]
@@ -112,7 +111,7 @@ class Dqn():
     def select_action(self, state):
         # To select an action, we must run the NN to get Q-values for each action for the actual
         # state. After getting Q-values, it is necessary to do a multinomial regression, classifying
-        # each Q-value into a probability of being a agood action. To do so, we use function Softmax.
+        # each Q-value into a probability of being a a good action for that state. To do so, we use function Softmax.
         probs = F.softmax(self.model(Variable(state, volatile = True))*self.temperature)
         # After getting those probs, we sample one of them, using the multinomial method for Torch tensors
         action = probs.multinomial(1)
@@ -121,15 +120,19 @@ class Dqn():
 
     def learn(self):
         i = 0
+        # Getting an episode from the memory
         episode =self.memory.sample_episode()
+        # Defining the graph lenght for a case where len(self.memory.memory) != 0
         graph_end = len(episode) - 1
         if episode is None:
-            # If we receive nothing from sample_episode, don't enter on the while loop
+            # If we receive nothing from sample_episode, don't enter on the while loop below
             i = graph_end
         if ( len(self.memory.memory) == 0 ):
-            episode = self.memory.storehouse
-            graph_end = len(self.memory.storehouse) - 1
+            episode = self.memory.episodeStorer
+            graph_end = len(self.memory.episodeStorer) - 1
+        # Loop to perform backprop through time on the episode selected from the memory
         while i < graph_end :
+            # Get important values from each timestep on the episode 
             state, next_state, action, reward = episode[i]
             # Calculate the Q-value for the action taken on the episodes of memory sampled
             # (gather selects the index corespondent to the action taken on the tensor returned by model)
@@ -157,22 +160,20 @@ class Dqn():
 
 
     def update(self, reward, new_signal):
-        # Transform the signal received from the Jakobsen Model into a torch.tensor and make it a sample with .unsqueeze()
         new_state = torch.Tensor(new_signal).float().unsqueeze(0)
-        # Sampling batches to be passed to learn, to actualize the paramethers of the network 
-        if len(self.memory.storehouse) < 39:
-            self.memory.storehouse.append((self.last_state, new_state, torch.LongTensor([int(self.last_action)]), torch.Tensor([self.last_reward])))
-        if len(self.memory.storehouse) == 39:    
-            # Push the new_state into the memorie (experience replay) with the other data necessary to make the
-            # backward pass, calculating the Q-value on the time "t", based on the rewart on t+1 and on the 
-            # action valuefor the optimal policy
+        # Storing information for one episode
+        if len(self.memory.episodeStorer) < 39:
+            self.memory.episodeStorer.append((self.last_state, new_state, torch.LongTensor([int(self.last_action)]), torch.Tensor([self.last_reward])))
+        # if the episode has ended:
+        if len(self.memory.episodeStorer) == 39:    
+            # Push the episode to the memory, so we can use it in the experience replay
             self.memory.push()
-            self.memory.storehouse = []
-        if len(self.memory.storehouse) % 1 == 0:
-            self.learn()            
-        # Use the temperature paramether to control the exploration/exploitaition ratioon the model
+            # Clear the list that stores episodes
+            self.memory.episodeStorer = []
+        # Backpropagate information through the network with experience replay
+        self.learn()            
+        # Increase the temperature paramether, controlling the exploration/exploitaition ratioon the model
         if self.temperature < 100 and len(self.memory.memory) > 15:
-            #if len(self.memory.memory) % 25 == 0:
             self.temperature += (1/50)
             print('temperature = ', self.temperature)
         # Select an action with the select_action method, that uses the Q-values obtained from the Network
@@ -183,7 +184,7 @@ class Dqn():
         self.last_state = new_state
         self.last_reward = reward
         self.reward_window.append(reward)
-        # Acualising values on the reward window
+        # Acualising values on the reward window to get feedback from the model
         if len(self.reward_window) > 100:
             del self.reward_window[0]
         return action
