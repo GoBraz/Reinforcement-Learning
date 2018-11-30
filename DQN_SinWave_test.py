@@ -17,15 +17,17 @@ def Wall(t):
     bottonRewardLim = -2 + 5*math.sin(w*t)
     return upperWall, bottonWall, upperRewardLim, bottonRewardLim
 
+# importing the class that applies DQN
 brain = Dqn(2,3,0.9)
 
-#defining the car
 #initial position:
 pos = 0
-ramp = 1
+# how much the car can move up or down in a loop
+ramp = 0.5
 t = 0.0
 reward = 0.0
 
+# Declarating vectors to store information
 V_upperWall = []
 V_bottonWall = []
 V_pos = []
@@ -38,6 +40,8 @@ V_reward = []
 # defining the loop to control the position of the car along time
 while (True):
     t+=0.1
+    
+    #Getting positions of the wall and reward limits for each timestep
     upperWall, bottonWall, upperRewardLim, bottonRewardLim = Wall(t)
     action = int(brain.update(reward, [t,pos]))
     
@@ -47,19 +51,20 @@ while (True):
     V_bottonRewardLim.append(bottonRewardLim)
     V_action.append(action)
     
-    # subir
+    # Go up
     if action == 0:
         ramp = 1
-    # manter
+    # stand still
     elif action == 1:
         ramp = 0
-    # descer
+    # Go down
     elif action == 2:
         ramp = -1
-        
-    pos = pos + ramp*0.5
     
+    # Actualizing position of the agent
+    pos = pos + ramp
     
+    # defining the rewards for the agent 
     if bottonRewardLim <= pos <= upperRewardLim:
         reward = 1
     elif pos >= upperWall or pos <= bottonWall:
