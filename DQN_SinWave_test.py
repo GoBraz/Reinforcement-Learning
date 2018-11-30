@@ -5,7 +5,7 @@ Created on Wed Nov 28 16:58:58 2018
 """
 import math
 import matplotlib.pyplot as plt
-from ai_LSTM2 import Dqn
+from ai_LSTM import Dqn
 
 # Defining function to create the walls
 def Wall(t):
