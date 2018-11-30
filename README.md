@@ -2,7 +2,7 @@
 
 Place to study the mechanics of reinforcement Learning.
 
-Archives:
+# Archives:
 
 
 ai_LSTM -> Create a LSTM agent to perform DQN 
