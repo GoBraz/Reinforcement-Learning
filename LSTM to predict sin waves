@@ -1,0 +1,119 @@
+# Importing libraries:
+import numpy as np
+import random
+import math
+import os
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.autograd as autograd
+from torch.autograd import Variable
+import matplotlib.pyplot as plt
+import time
+
+class LSTM(nn.Module):
+    def __init__(self):
+        super(LSTM, self).__init__()
+        self.input_size = 1
+        self.hidden_size = 50
+        self.output_size = 1
+        self.hx1 = torch.randn(self.hidden_size).unsqueeze(0)
+        self.hx2 = torch.randn(self.hidden_size).unsqueeze(0)
+        #print('hx.size() = ',hx.size())
+        #print('hx = ', hx)
+        self.cx1 = torch.randn(self.hidden_size).unsqueeze(0)
+        self.cx2 = torch.randn(self.hidden_size).unsqueeze(0)
+        #print('cx.size() = ',cx.size())
+        #print('cx = ', cx)
+        self.lstm1 = nn.LSTMCell(self.input_size, self.hidden_size)
+        self.lstm2 = nn.LSTMCell(self.hidden_size, self.hidden_size)
+        self.linear = nn.Linear(self.hidden_size,self.output_size)
+
+    def forward(self, state):
+        self.hx1, self.cx1 = self.lstm1(state,(self.hx1,self.cx1))
+        #self.hx2, self.cx2 = self.lstm2(self.hx1,(self.hx2,self.cx2))
+        value = self.linear(self.hx1)
+        return value
+    
+class memory():
+    def __init__(self):
+        self.memory = []
+    
+    def push(self,state,pred):
+        self.memory.append([state,pred])
+        
+    def sample(self):
+        return np.sample(self.memory)
+    
+def sinGenerator(t):
+    Amp = 2
+    T = 1
+    w = 2*math.pi/(T)
+    w2 = 2*math.pi/(T*10)
+    return Amp*math.sin(w*t)*math.sin(w2*t)
+
+
+#%%
+
+j = -50
+loss = 0.11
+mem = memory()
+t = torch.tensor(0, dtype=torch.float32, requires_grad = False).unsqueeze(0).unsqueeze(0)
+lstm = LSTM()
+optimizer = optim.Adam(lstm.parameters(), lr = 0.8)
+loss_func = nn.MSELoss()
+loss_vec = [1]
+target_vec = [0]
+pred_vec = [1]
+t_vec = [t]
+curentTime = 0
+lastTime = 0
+while(t<500):
+    Dt = (curentTime - lastTime)
+    print('Time to Process = ', Dt)
+    lastTime = curentTime
+    optimizer.zero_grad()
+    t=t+0.05
+    t_copy = t
+    #print(t)
+    t_vec.append(t_copy)
+    target = torch.tensor(sinGenerator(t), dtype = torch.float32, requires_grad = False).unsqueeze(0).unsqueeze(0)
+    target_vec.append(float(target))
+    pred = lstm.forward(t)
+    pred_vec.append(float(pred))
+    loss = loss_func(pred,target)
+    loss_vec.append(loss)
+    error = 0
+    if len(loss_vec) < 50:
+        for i in loss_vec:
+            #print(i)
+            error = error + i 
+        #error.backward(retain_graph=True)  
+        loss.backward(retain_graph=True)          
+    if len(loss_vec) >= 50:
+        for i in loss_vec[j:-1]:
+            error = error + i 
+        #error.backward(retain_graph=True)
+        loss.backward(retain_graph=True)          
+        if(len(loss_vec) % 50 == 0):
+            pred.detach_()
+            lstm.hx1.detach_()
+            #lstm.hx2.detach_()
+            lstm.cx1.detach_()
+            #lstm.cx2.detach_()            
+            j = -1
+        j = j - 1
+        print (j)
+    optimizer.step()
+    print('t = ', t)
+    plt.subplot(1,2,1)
+    plt.plot(t_vec,target_vec,color = 'r')
+    plt.plot(t_vec,pred_vec,color = 'b')
+    plt.ylim(-4,4)
+    plt.subplot(1,2,2)
+    plt.plot(t_vec, loss_vec, color = 'g')
+    plt.ylim(0,10)
+    plt.show()
+    plt.clf()
+    curentTime = time.clock()
